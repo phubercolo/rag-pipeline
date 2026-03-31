@@ -6,6 +6,7 @@ from pathlib import Path
 
 from pypdf import PdfReader
 
+from rag_pipeline.config import Settings
 from rag_pipeline.models import Document
 
 logger = logging.getLogger(__name__)
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 SUPPORTED_EXTENSIONS = {".txt", ".md", ".pdf"}
 
 
-def load_documents(documents_dir: Path) -> list[Document]:
+def load_documents(documents_dir: Path, settings: Settings) -> list[Document]:
     """Load supported files from a folder into normalized Document objects."""
 
     documents: list[Document] = []
@@ -23,9 +24,11 @@ def load_documents(documents_dir: Path) -> list[Document]:
             continue
 
         try:
-            text = extract_text(path)
+            text = extract_text(path, settings)
             if not text.strip():
-                logger.warning("Skipping empty document: %s", path)
+                logger.warning(
+                    "Skipping document with no extractable text: %s", path
+                )
                 continue
 
             doc_hash = hashlib.sha1(str(path.resolve()).encode("utf-8")).hexdigest()
@@ -44,19 +47,19 @@ def load_documents(documents_dir: Path) -> list[Document]:
     return documents
 
 
-def extract_text(path: Path) -> str:
+def extract_text(path: Path, settings: Settings) -> str:
     suffix = path.suffix.lower()
 
     if suffix in {".txt", ".md"}:
         return path.read_text(encoding="utf-8", errors="ignore")
     if suffix == ".pdf":
-        return extract_pdf_text(path)
+        return extract_pdf_text(path, settings)
 
     raise ValueError(f"Unsupported file type: {path.suffix}")
 
 
-def extract_pdf_text(path: Path) -> str:
-    """Extract text page by page and ignore missing-text pages gracefully."""
+def extract_pdf_text(path: Path, settings: Settings) -> str:
+    """Extract text from PDFs, with optional OCR fallback for scanned files."""
 
     reader = PdfReader(str(path))
     pages: list[str] = []
@@ -71,11 +74,63 @@ def extract_pdf_text(path: Path) -> str:
         except Exception as exc:
             logger.warning("Failed to read page %s of %s: %s", page_number, path, exc)
 
-    return "\n".join(pages)
+    extracted_text = "\n".join(pages).strip()
+    if extracted_text:
+        return extracted_text
+
+    logger.info("No embedded PDF text found in %s", path)
+    if not settings.enable_ocr:
+        logger.info(
+            "OCR is disabled. Set RAG_ENABLE_OCR=true to try OCR for scanned PDFs."
+        )
+        return ""
+
+    return extract_pdf_text_with_ocr(path, settings)
+
+
+def extract_pdf_text_with_ocr(path: Path, settings: Settings) -> str:
+    """OCR a PDF by rendering each page to an image and sending it to Tesseract."""
+
+    import io
+
+    import fitz
+    import pytesseract
+    from PIL import Image
+
+    if settings.tesseract_cmd:
+        pytesseract.pytesseract.tesseract_cmd = settings.tesseract_cmd
+
+    logger.info("Attempting OCR for %s", path)
+    pages: list[str] = []
+
+    with fitz.open(path) as pdf_document:
+        for page_number, page in enumerate(pdf_document, start=1):
+            try:
+                pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+                image = Image.open(io.BytesIO(pixmap.pil_tobytes(format="PNG")))
+                page_text = pytesseract.image_to_string(image).strip()
+                if page_text:
+                    pages.append(page_text)
+                else:
+                    logger.debug("OCR found no text on page %s of %s", page_number, path)
+            except pytesseract.TesseractNotFoundError:
+                logger.error(
+                    "Tesseract OCR is not installed or not on PATH. "
+                    "Install Tesseract or set TESSERACT_CMD."
+                )
+                return ""
+            except Exception as exc:
+                logger.warning("OCR failed on page %s of %s: %s", page_number, path, exc)
+
+    ocr_text = "\n".join(pages).strip()
+    if ocr_text:
+        logger.info("OCR extracted text from %s", path)
+    else:
+        logger.warning("OCR completed but found no text in %s", path)
+    return ocr_text
 
 
 def normalize_whitespace(text: str) -> str:
     lines = [line.strip() for line in text.replace("\r\n", "\n").splitlines()]
     collapsed = "\n".join(line for line in lines if line)
     return collapsed.strip()
-

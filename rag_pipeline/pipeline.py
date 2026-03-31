@@ -43,7 +43,7 @@ class RagPipeline:
         self.retriever = Retriever(self.embedding_provider, self.vector_store)
 
     def ingest(self) -> int:
-        documents = load_documents(self.settings.documents_dir)
+        documents = load_documents(self.settings.documents_dir, self.settings)
         if not documents:
             logger.warning("No supported documents found in %s", self.settings.documents_dir)
             return 0
@@ -68,4 +68,3 @@ class RagPipeline:
 
         answer = self.generator.generate(query=query, retrieved_chunks=retrieved)
         return AnswerResult(answer=answer, sources=retrieved)
-

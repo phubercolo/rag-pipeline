@@ -26,6 +26,13 @@ class Settings:
     chunk_overlap: int = int(os.getenv("RAG_CHUNK_OVERLAP", "150"))
     retrieval_k: int = int(os.getenv("RAG_RETRIEVAL_K", "4"))
     log_level: str = os.getenv("RAG_LOG_LEVEL", "INFO")
+    enable_ocr: bool = os.getenv("RAG_ENABLE_OCR", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    tesseract_cmd: str | None = os.getenv("TESSERACT_CMD")
 
     def ensure_directories(self) -> None:
         self.documents_dir.mkdir(parents=True, exist_ok=True)
@@ -36,4 +43,3 @@ def get_settings() -> Settings:
     settings = Settings()
     settings.ensure_directories()
     return settings
-

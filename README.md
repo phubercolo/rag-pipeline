@@ -3,6 +3,7 @@
 This project is a compact retrieval-augmented generation (RAG) pipeline in Python. It loads local documents, chunks them, creates embeddings, stores them in a local FAISS index, retrieves the most relevant chunks for a question, and sends the retrieved context to an LLM to generate a grounded answer.
 
 The code is intentionally split into small modules so you can swap parts later, including replacing the local vector store with an AWS-backed option such as OpenSearch or Bedrock Knowledge Bases.
+It supports text, markdown, and PDF files. For scanned or image-based PDFs, you can enable OCR with Tesseract.
 
 ## Folder Structure
 
@@ -45,9 +46,13 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-3. Copy `.env.example` to `.env` and add your `OPENAI_API_KEY`.
+3. Optional but recommended for scanned PDFs: install Tesseract OCR.
 
-4. Put your `.txt`, `.md`, and `.pdf` files into `data/documents/`.
+On Windows, install Tesseract and either add it to `PATH` or set `TESSERACT_CMD` in `.env`.
+
+4. Copy `.env.example` to `.env` and add your `OPENAI_API_KEY`.
+
+5. Put your `.txt`, `.md`, and `.pdf` files into `data/documents/`.
 
 ## Run
 
@@ -94,15 +99,24 @@ python main.py chat
 - `RAG_CHUNK_OVERLAP`: Chunk overlap in characters.
 - `RAG_RETRIEVAL_K`: Number of chunks to retrieve.
 - `RAG_LOG_LEVEL`: Logging level.
+- `RAG_ENABLE_OCR`: Enables OCR fallback for scanned PDFs when embedded text is missing.
+- `TESSERACT_CMD`: Optional full path to the Tesseract executable if it is not on `PATH`.
 
 ## End-to-End Flow
 
 1. The `ingest` command scans `data/documents/` for supported files.
-2. Extracted text is normalized and split into overlapping chunks.
+2. Extracted text is normalized and split into overlapping chunks. If a PDF has no embedded text and OCR is enabled, the pipeline tries Tesseract OCR.
 3. Each chunk is embedded and stored in a local FAISS index, with metadata written to disk alongside it.
 4. The `ask` or `chat` command embeds the user query and retrieves the top matching chunks.
 5. Those chunks are inserted into the generation prompt.
 6. The LLM returns an answer grounded in the retrieved context, and the CLI prints both the answer and the source chunks used.
+
+## PDF Notes
+
+- Text-based PDFs work with `pypdf`.
+- Scanned PDFs usually need OCR.
+- When a PDF has no extractable text, the log now says so explicitly instead of calling the file "empty."
+- To enable OCR, set `RAG_ENABLE_OCR=true` in `.env`.
 
 ## AWS-Friendly Extension Points
 
@@ -113,4 +127,3 @@ python main.py chat
 
 - Add a reranking stage after retrieval to improve answer quality when documents are long or noisy.
 - Add metadata filters, such as filename or document type constraints, before generation.
-

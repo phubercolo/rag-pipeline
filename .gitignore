@@ -31,3 +31,5 @@ Thumbs.db
 # Local RAG outputs
 data/index/chunks.index
 data/index/chunks.json
+data/documents/**
+!data/documents/.gitkeep
