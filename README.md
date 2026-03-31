@@ -1,5 +1,7 @@
 # Small Local-First RAG Pipeline
 
+Supports local document ingestion for `.txt`, `.md`, and `.pdf` files, with optional OCR for scanned or image-based PDFs.
+
 This project is a compact retrieval-augmented generation (RAG) pipeline in Python. It loads local documents, chunks them, creates embeddings, stores them in a local FAISS index, retrieves the most relevant chunks for a question, and sends the retrieved context to an LLM to generate a grounded answer.
 
 The code is intentionally split into small modules so you can swap parts later, including replacing the local vector store with an AWS-backed option such as OpenSearch or Bedrock Knowledge Bases.
@@ -54,6 +56,12 @@ On Windows, install Tesseract and either add it to `PATH` or set `TESSERACT_CMD`
 
 5. Put your `.txt`, `.md`, and `.pdf` files into `data/documents/`.
 
+6. If you want OCR for scanned PDFs, set this in `.env`:
+
+```env
+RAG_ENABLE_OCR=true
+```
+
 ## Run
 
 Build the local index:
@@ -61,6 +69,8 @@ Build the local index:
 ```powershell
 python main.py ingest
 ```
+
+If OCR is enabled, scanned PDFs without an embedded text layer will be sent through Tesseract during ingestion.
 
 Ask one question:
 
@@ -117,6 +127,7 @@ python main.py chat
 - Scanned PDFs usually need OCR.
 - When a PDF has no extractable text, the log now says so explicitly instead of calling the file "empty."
 - To enable OCR, set `RAG_ENABLE_OCR=true` in `.env`.
+- If Tesseract is not on `PATH`, set `TESSERACT_CMD` to the full path of `tesseract.exe`.
 
 ## AWS-Friendly Extension Points
 
