@@ -18,11 +18,14 @@ env/
 
 # IDE settings
 .vscode/
+SESSION_NOTES.md
 
 # Build artifacts
 build/
 dist/
 *.egg-info/
+frontend/node_modules/
+frontend/dist/
 
 # OS files
 .DS_Store

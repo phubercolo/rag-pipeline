@@ -1,17 +1,37 @@
-# Small Local-First RAG Pipeline
+# RAG Pipeline
 
 Supports local document ingestion for `.txt`, `.md`, and `.pdf` files, with optional OCR for scanned or image-based PDFs.
 
-This project is a compact retrieval-augmented generation (RAG) pipeline in Python. It loads local documents, chunks them, creates embeddings, stores them in a local FAISS index, retrieves the most relevant chunks for a question, and sends the retrieved context to an LLM to generate a grounded answer.
+This repository contains a retrieval-augmented generation (RAG) pipeline in Python. It ingests local documents, chunks content, creates embeddings, stores them in a FAISS index, retrieves the most relevant context for a question, and sends that context to an LLM to generate grounded answers.
 
-The code is intentionally split into small modules so you can swap parts later, including replacing the local vector store with an AWS-backed option such as OpenSearch or Bedrock Knowledge Bases.
+The system is organized into modular components so you can evolve the architecture over time, including replacing the local vector store with an AWS-backed option such as OpenSearch or Bedrock Knowledge Bases.
 It supports text, markdown, and PDF files. For scanned or image-based PDFs, you can enable OCR with Tesseract.
 
 ## Folder Structure
 
 ```text
 .
+|-- api/
+|   |-- __init__.py
+|   |-- main.py
+|   `-- schemas.py
 |-- .env.example
+|-- frontend/
+|   |-- index.html
+|   |-- package.json
+|   |-- tsconfig.app.json
+|   |-- tsconfig.json
+|   |-- tsconfig.node.json
+|   |-- vite.config.ts
+|   `-- src/
+|       |-- api/
+|       |   |-- client.ts
+|       |   `-- rag.ts
+|       |-- types/
+|       |   `-- api.ts
+|       |-- App.tsx
+|       |-- main.tsx
+|       `-- styles.css
 |-- README.md
 |-- main.py
 |-- requirements.txt
@@ -46,6 +66,26 @@ python -m venv .venv
 
 ```powershell
 pip install -r requirements.txt
+```
+
+If you want the React frontend too, install its dependencies:
+
+```powershell
+cd frontend
+npm install
+cd ..
+```
+
+On Windows PowerShell, if `npm` is blocked by execution policy, either reopen the terminal after setting:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+or use:
+
+```powershell
+npm.cmd install
 ```
 
 3. Optional but recommended for scanned PDFs: install Tesseract OCR.
@@ -84,16 +124,49 @@ Start an interactive session:
 python main.py chat
 ```
 
+Run the FastAPI backend:
+
+```powershell
+uvicorn api.main:app --reload
+```
+
+Run the React frontend:
+
+```powershell
+cd frontend
+npm run dev
+```
+
+If PowerShell blocks `npm`, use:
+
+```powershell
+npm.cmd run dev
+```
+
+The frontend defaults to `http://127.0.0.1:8000` for the API. To point it somewhere else, create `frontend/.env` with:
+
+```env
+VITE_API_BASE_URL=http://127.0.0.1:8000
+```
+
+From the browser UI, you can:
+- Upload a `.txt`, `.md`, or `.pdf` file directly into `data/documents/`
+- Automatically trigger ingest right after upload
+- Re-run ingest for all documents already on disk
+- Ask questions against the current local index
+
 ## Architecture
 
 - `ingestion.py` loads files from disk and extracts text from text, markdown, and PDF documents.
 - `chunking.py` uses overlapping recursive character splitting to preserve context across chunk boundaries.
-- `embeddings.py` wraps the embedding provider behind a small interface so another provider can be added later.
+- `embeddings.py` wraps the embedding provider behind a clean interface so another provider can be added later.
 - `vector_store.py` stores vectors locally in FAISS and persists chunk metadata in JSON for source reconstruction.
 - `retrieval.py` embeds a query and performs similarity search.
 - `generation.py` builds the prompt from retrieved chunks and asks the LLM to answer using only that context.
 - `pipeline.py` composes the services into two flows: ingest and answer.
-- `cli.py` exposes a simple command-line interface for local use in VS Code or a terminal.
+- `cli.py` exposes a command-line interface for local use in VS Code or a terminal.
+- `api/main.py` exposes `health`, `ingest`, `upload`, and `ask` endpoints for the UI.
+- `frontend/` contains a React + TypeScript app that calls the FastAPI layer.
 
 ## Environment Variables
 
@@ -115,11 +188,12 @@ python main.py chat
 ## End-to-End Flow
 
 1. The `ingest` command scans `data/documents/` for supported files.
-2. Extracted text is normalized and split into overlapping chunks. If a PDF has no embedded text and OCR is enabled, the pipeline tries Tesseract OCR.
-3. Each chunk is embedded and stored in a local FAISS index, with metadata written to disk alongside it.
-4. The `ask` or `chat` command embeds the user query and retrieves the top matching chunks.
-5. Those chunks are inserted into the generation prompt.
-6. The LLM returns an answer grounded in the retrieved context, and the CLI prints both the answer and the source chunks used.
+2. The browser upload flow saves a selected file into `data/documents/` and then runs the same ingest pipeline.
+3. Extracted text is normalized and split into overlapping chunks. If a PDF has no embedded text and OCR is enabled, the pipeline tries Tesseract OCR.
+4. Each chunk is embedded and stored in a local FAISS index, with metadata written to disk alongside it.
+5. The `ask` or `chat` command embeds the user query and retrieves the top matching chunks.
+6. Those chunks are inserted into the generation prompt.
+7. The LLM returns an answer grounded in the retrieved context, and the CLI or frontend prints both the answer and the source chunks used.
 
 ## PDF Notes
 

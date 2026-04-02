@@ -14,6 +14,26 @@ logger = logging.getLogger(__name__)
 SUPPORTED_EXTENSIONS = {".txt", ".md", ".pdf"}
 
 
+def _load_ocr_dependencies() -> tuple[object, object, object]:
+    """Import OCR dependencies with a friendly error if they are unavailable."""
+
+    try:
+        import fitz
+        import pytesseract
+        from PIL import Image
+    except ModuleNotFoundError as exc:
+        missing_module = exc.name or "an OCR dependency"
+        logger.error(
+            "OCR dependencies are missing (%s). Install them in your virtual "
+            "environment with `python -m pip install -r requirements.txt`, then "
+            "run ingest again.",
+            missing_module,
+        )
+        raise RuntimeError("OCR dependencies are not installed") from exc
+
+    return fitz, pytesseract, Image
+
+
 def load_documents(documents_dir: Path, settings: Settings) -> list[Document]:
     """Load supported files from a folder into normalized Document objects."""
 
@@ -93,9 +113,10 @@ def extract_pdf_text_with_ocr(path: Path, settings: Settings) -> str:
 
     import io
 
-    import fitz
-    import pytesseract
-    from PIL import Image
+    try:
+        fitz, pytesseract, Image = _load_ocr_dependencies()
+    except RuntimeError:
+        return ""
 
     if settings.tesseract_cmd:
         pytesseract.pytesseract.tesseract_cmd = settings.tesseract_cmd
